@@ -1,0 +1,182 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib.ticker as ticker
+
+# Read the Excel file from the CO2_2 sheet
+file_path = r"FILE PATH"
+try:
+    df = pd.read_excel(file_path, sheet_name="CO2_2")
+    
+    # Print the column names to check what's available
+    print("Available columns in the CO2_2 sheet:")
+    for col in df.columns:
+        print(f"  - '{col}'")
+        
+    # Find the correct column names for metrics based on keywords
+    sty_col = next((col for col in df.columns if 'STY' in str(col)), None)
+    conv_col = next((col for col in df.columns if 'Conv' in str(col) or 'Conversion' in str(col)), None)
+    reaktor_col = next((col for col in df.columns if 'Reaktor' in str(col)), None)
+    
+    if sty_col:
+        print(f"Found STY column: {sty_col}")
+    else:
+        print("WARNING: No STY column found")
+        
+    if conv_col:
+        print(f"Found Conversion column: {conv_col}")
+    else:
+        print("WARNING: No Conversion column found")
+        
+    if reaktor_col:
+        print(f"Found Reaktor column: {reaktor_col}")
+    else:
+        print("WARNING: No Reaktor column found")
+    
+    # Create a figure with one plot and larger margins
+    fig, ax1 = plt.subplots(figsize=(10, 9))  # Increased height for more margin
+    
+    # Add more space at the top for the plot without using it all for the legend
+    plt.subplots_adjust(top=0.9)
+    
+    # Define colors 
+    base_color = '#48A9C5'  # Blue
+    line_color = '#EF3895'  # Pink for line plot
+    dot_color = '#EEDC00'   # Yellow for dots
+    
+    # Set the x-axis (Temperature) data
+    temperatures = df['T'].values
+    
+    # Sort data by temperature to ensure proper line connections
+    sort_idx = np.argsort(temperatures)
+    temperatures = temperatures[sort_idx]
+    x_positions = np.arange(len(temperatures))  # For bar positioning
+    
+    # Handles for the legend with abbreviated labels
+    handles = []
+    labels = []
+    
+    # First y-axis: Single Pass Conversion (left y-axis) as BARS
+    if conv_col:
+        conversion_values = df[conv_col].values[sort_idx]
+        bar_width = 0.3  # Narrow bars
+        bars = ax1.bar(x_positions, conversion_values, width=bar_width, color=base_color, 
+                      edgecolor='black', linewidth=1.5)
+        handles.append(bars)
+        labels.append("X$_{C}$")  # Abbreviated label
+        
+        ax1.set_xlabel('Temperature (°C)', fontsize=18)
+        ax1.set_ylabel('Single Pass C-Conversion X$_{C}$ (%)', fontsize=18)
+        
+        # Set x-ticks to show actual temperatures
+        ax1.set_xticks(x_positions)
+        ax1.set_xticklabels([f"{t:.0f}" for t in temperatures])
+        
+        # Black formatting for all text elements with larger font
+        ax1.tick_params(axis='y', labelsize=18, colors='black', width=2)
+        ax1.tick_params(axis='x', labelsize=18, colors='black', width=2)
+        ax1.yaxis.label.set_color('black')
+        ax1.xaxis.label.set_color('black')
+        
+        # Format with two decimal places
+        ax1.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.2f'))
+    
+    # Second y-axis: STY (first right y-axis) as LINE with markers
+    if sty_col:
+        ax2 = ax1.twinx()
+        sty_values = df[sty_col].values[sort_idx]
+        line, = ax2.plot(x_positions, sty_values, 'o-', color=line_color,
+                       linewidth=4, markersize=10)
+        handles.append(line)
+        labels.append("STY")  # Abbreviated label
+        
+        ax2.set_ylabel('Space Time Yield STY (kg/kg/h)', fontsize=18)
+        
+        # Black formatting for all text elements with larger font
+        ax2.tick_params(axis='y', labelsize=18, colors='black', width=2)
+        ax2.yaxis.label.set_color('black')
+        
+        # Format with two decimal places
+        ax2.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.2f'))
+        
+        # Offset the axis position to prevent overlap - increased distance
+        ax2.spines['right'].set_position(('outward', 80))
+    
+    # Third y-axis: Reactor Influent COR (second right y-axis) as DOTS with outlines
+    if reaktor_col:
+        ax3 = ax1.twinx()
+        reaktor_values = df[reaktor_col].values[sort_idx]
+        
+        # Offset the second right y-axis further to the right - increased distance
+        ax3.spines['right'].set_position(('outward', 160))
+        
+        # Dots with very pronounced outlines and lighter fill - using yellow color
+        scatter = ax3.scatter(x_positions, reaktor_values, s=120, 
+                            edgecolor=dot_color, linewidth=4,  # Thicker outline
+                            facecolor=dot_color, alpha=0.3)    # Reduced opacity
+        handles.append(scatter)
+        labels.append("COR")  # Abbreviated label
+        
+        ax3.set_ylabel('Results Reactor Influent COR (%$_{CO_{2}}$)', fontsize=18)
+        
+        # Black formatting for all text elements with larger font
+        ax3.tick_params(axis='y', labelsize=18, colors='black', width=2)
+        ax3.yaxis.label.set_color('black')
+        
+        # Format with two decimal places
+        ax3.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.2f'))
+    
+    # Create a unified legend with the abbreviated labels
+    # Place it inside the plot area at the top
+    ax1.legend(handles, labels, loc='upper center', fontsize=16, 
+              bbox_to_anchor=(0.5, 0.95), ncol=3, framealpha=0.7)
+    
+    # Thicken the frame and spines and make them black
+    for ax in [ax1]:
+        for spine in ax.spines.values():
+            spine.set_linewidth(3)
+            spine.set_color('black')
+    
+    if sty_col:
+        for spine in ax2.spines.values():
+            if spine.get_visible():
+                spine.set_linewidth(3)
+                spine.set_color('black')
+    
+    if reaktor_col:
+        for spine in ax3.spines.values():
+            if spine.get_visible():
+                spine.set_linewidth(3)
+                spine.set_color('black')
+    
+    # Add grid for better readability
+    ax1.grid(True, linestyle='--', alpha=0.7, linewidth=1.5)
+    
+    # Determine current data max values
+    current_max1 = max(conversion_values) if conv_col else 0
+    current_max2 = max(sty_values) if sty_col else 0
+    current_max3 = max(reaktor_values) if reaktor_col else 0
+    
+    # Add 15% extra space at the top of each y-axis to prevent clipping
+    # Set y-axis to start from 0 for better interpretation
+    ax1.set_ylim(bottom=0, top=current_max1 * 1.15)
+    
+    if sty_col:
+        ax2.set_ylim(bottom=0, top=current_max2 * 1.15)
+    
+    if reaktor_col:
+        ax3.set_ylim(bottom=0, top=current_max3 * 1.03)
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    # Show the plot
+    plt.show()
+    
+    # Optionally save the figure
+    # plt.savefig('temperature_compound_plot.png', dpi=300, bbox_inches='tight')
+
+except Exception as e:
+    print(f"Error processing the Excel file: {e}")
+    import traceback
+    traceback.print_exc()
