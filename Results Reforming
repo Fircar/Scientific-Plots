@@ -1,0 +1,169 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+from matplotlib import cm
+from matplotlib.tri import Triangulation
+from mpl_toolkits.mplot3d import Axes3D
+
+# Define the data for 3D plot
+data_3d = np.array([
+    3D Data Array
+])
+
+# Define the data for gas composition
+# Columns: Lambda, s/c, GHSV, T, H2, CO, CO2, CH4, SN, COR
+data_comp = np.array([
+   CUSTOM DATA ARRAY
+])
+
+# ==============================
+# FIGURE 1: Just the 3D plot
+# ==============================
+fig_3d = plt.figure(figsize=(9, 7))  # 50% of the original width
+
+# Create 3D axes that fill the figure
+ax_3d = fig_3d.add_subplot(111, projection='3d')
+
+# Create a Delaunay triangulation of the points
+tri = Triangulation(data_3d[:, 0], data_3d[:, 2])
+
+# Define axis limits
+x_min, x_max = min(data_3d[:, 0]), max(data_3d[:, 0])
+y_min, y_max = min(data_3d[:, 2]), max(data_3d[:, 2])
+z_min, z_max = min(data_3d[:, 3]), max(data_3d[:, 3])
+
+# Add some padding to the axis limits
+x_pad = (x_max - x_min) * 0.1
+y_pad = (y_max - y_min) * 0.1
+z_pad = (z_max - z_min) * 0.1
+
+# Set the offsets for the projection planes
+z_bottom = z_min - z_pad
+x_wall = x_max + x_pad
+y_wall = y_max + y_pad
+
+# First draw the projection contours on the bottom and side planes
+# Bottom contour (z-plane)
+z_contour = ax_3d.tricontour(data_3d[:, 0], data_3d[:, 2], data_3d[:, 3], 
+                             triangles=tri.triangles, levels=10, 
+                             offset=z_bottom, cmap=cm.viridis, alpha=0.6)
+
+# Side contour on x-plane
+x_contour = ax_3d.tricontour(data_3d[:, 0], data_3d[:, 2], data_3d[:, 3], 
+                             triangles=tri.triangles, levels=10, 
+                             zdir='x', offset=x_wall, cmap=cm.viridis, alpha=0.6)
+
+# Side contour on y-plane
+y_contour = ax_3d.tricontour(data_3d[:, 0], data_3d[:, 2], data_3d[:, 3], 
+                             triangles=tri.triangles, levels=10, 
+                             zdir='y', offset=y_wall, cmap=cm.viridis, alpha=0.6)
+
+# Now draw the triangulated surface
+surf = ax_3d.plot_trisurf(data_3d[:, 0], data_3d[:, 2], data_3d[:, 3], triangles=tri.triangles,
+                          cmap=cm.viridis, linewidth=0.2, alpha=0.8, edgecolor='grey')
+
+# Add the original data points as scatter plot
+sc = ax_3d.scatter(data_3d[:, 0], data_3d[:, 2], data_3d[:, 3], 
+                   s=100, color='#EF3895', edgecolor='black', linewidth=2,
+                   zorder=100)
+
+# Add projections of points onto the bottom and side planes
+for x, y, z in zip(data_3d[:, 0], data_3d[:, 2], data_3d[:, 3]):
+    # Bottom plane
+    ax_3d.scatter(x, y, z_bottom, s=40, color='#EF3895', alpha=0.5, edgecolor='black')
+    # Left side plane
+    ax_3d.scatter(x_wall, y, z, s=40, color='#EF3895', alpha=0.5, edgecolor='black')
+    # Right side plane
+    ax_3d.scatter(x, y_wall, z, s=40, color='#EF3895', alpha=0.5, edgecolor='black')
+
+# Set axis limits with padding and invert both x and y axes
+ax_3d.set_xlim(x_max + x_pad, x_min - x_pad)  # Inverted order for lambda axis
+ax_3d.set_ylim(y_max + y_pad, y_min - y_pad)  # Inverted order for GHSV axis
+ax_3d.set_zlim(z_min - z_pad, z_max + z_pad)
+
+# Set viewing angle for optimal readability with inverted axes
+ax_3d.view_init(elev=30, azim=45)  # Adjusted viewing angle
+
+# Set axis labels with adjusted positioning
+ax_3d.set_xlabel('λ', fontsize=14, labelpad=15)
+ax_3d.set_ylabel('GHSV (h⁻¹)', fontsize=14, labelpad=15)
+# Intentionally not setting z-label since it will be added separately
+
+# Increase tick label sizes
+ax_3d.tick_params(axis='x', labelsize=14)
+ax_3d.tick_params(axis='y', labelsize=14)
+ax_3d.tick_params(axis='z', labelsize=14)
+
+# Format the y-axis (GHSV) ticks to be more readable
+ax_3d.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, pos: f'{int(x):,}'))
+
+plt.tight_layout()
+plt.savefig('3d_plot.png', dpi=300, bbox_inches='tight')
+
+# =======================================================
+# FIGURE 2: Just the label "Temperature (°C)"
+# =======================================================
+fig_label = plt.figure(figsize=(1, 7))  # Narrow figure, same height
+plt.text(0.5, 0.5, 'Temperature (°C)', fontsize=14, rotation=90, 
+         ha='center', va='center')
+plt.axis('off')  # Hide axes
+plt.savefig('temp_label.png', dpi=300, bbox_inches='tight', transparent=True)
+
+# ====================================================
+# FIGURE 3: Composition and SN/COR plots side by side
+# ====================================================
+fig_right = plt.figure(figsize=(9, 7))  # 50% of original width, same height
+gs = gridspec.GridSpec(1, 2, width_ratios=[1, 1])
+
+# Viridis-inspired color palette
+viridis_colors = [
+    cm.viridis(0.2),   # Light green for H2
+    cm.viridis(0.5),   # Blue for CO
+    cm.viridis(0.8),   # Purple for CO2
+    cm.viridis(0.0)    # Dark blue for CH4
+]
+
+# Marker styles for the composition plot
+marker_styles = ['o', 's', '^', 'D']
+
+# Left panel: Gas Composition vs Lambda
+ax_comp = fig_right.add_subplot(gs[0, 0])
+species_labels = ['H$_2$', 'CO', 'CO$_2$', 'CH$_4$']
+
+for i, (species, color, marker) in enumerate(zip(species_labels, viridis_colors, marker_styles)):
+    ax_comp.scatter(data_comp[:, 0], data_comp[:, 4+i], 
+                    label=species, color=color, marker=marker, s=90)
+
+ax_comp.set_xlabel('λ', fontsize=14)
+ax_comp.set_ylabel('Volume Fraction (%)', fontsize=14)
+ax_comp.tick_params(axis='both', labelsize=14)
+ax_comp.legend(loc='center left', bbox_to_anchor=(0.01, 0.7), fontsize=14)
+
+# Right panel: Syngas Number and COR Plot
+ax_sn_cor = fig_right.add_subplot(gs[0, 1])
+ax_sn_cor.scatter(data_comp[:, 0], data_comp[:, 8], label='SN', color='#21908C', marker='o', s=90)
+ax_sn_cor.set_xlabel('λ', fontsize=14)
+ax_sn_cor.tick_params(axis='x', labelsize=14)
+ax_sn_cor.tick_params(axis='y', labelsize=14)
+ax_sn_cor.set_ylabel('Stoichiometric Number (SN, -)', fontsize=14, color='black')
+
+# Twin axis for COR
+ax2 = ax_sn_cor.twinx()
+ax2.scatter(data_comp[:, 0], data_comp[:, 9], label='COR', color='#EF3895', marker='^', s=90)
+ax2.set_ylabel('Carbon Oxidation Ratio (COR, %$_{CO_2}$)', fontsize=14, color='black')
+ax2.tick_params(axis='x', labelsize=14)
+ax2.tick_params(axis='y', labelsize=14, labelcolor='black')
+
+# Combine legends
+lines1, labels1 = ax_sn_cor.get_legend_handles_labels()
+lines2, labels2 = ax2.get_legend_handles_labels()
+ax_sn_cor.legend(lines1 + lines2, labels1 + labels2, loc='best', fontsize=14)
+
+plt.tight_layout()
+plt.savefig('right_panels.png', dpi=300, bbox_inches='tight')
+
+plt.close('all')
+print("All three images saved successfully:")
+print("1. 3d_plot.png - The 3D surface plot")
+print("2. temp_label.png - Just the 'Temperature (°C)' label")
+print("3. right_panels.png - The composition and SN/COR plots")
