@@ -1,0 +1,213 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import matplotlib.dates as mdates
+from matplotlib import cm
+import matplotlib.ticker as ticker
+from datetime import datetime, date, time
+
+# Path to your Excel file
+excel_path = r"File Path"
+
+# Read the Excel file, specifically the "Start-Up Reformer" sheet
+df = pd.read_excel(excel_path, sheet_name="Start-Up Reformer")
+
+# Handle time-only values by converting them to proper datetime objects
+# This is necessary for proper plotting with matplotlib
+base_date = date.today()  # Use today's date as the base date
+
+# Determine the type of time data and convert accordingly
+if 'Uhrzeit' in df.columns:
+    first_val = df['Uhrzeit'].iloc[0]
+    
+    # If the values are datetime.time objects
+    if isinstance(first_val, time):
+        df['plot_time'] = [datetime.combine(base_date, t) for t in df['Uhrzeit']]
+    
+    # If the values are strings in HH:MM:SS format
+    elif isinstance(first_val, str):
+        try:
+            # Try to parse as time strings
+            time_objects = [datetime.strptime(t, '%H:%M:%S').time() for t in df['Uhrzeit']]
+            df['plot_time'] = [datetime.combine(base_date, t) for t in time_objects]
+        except ValueError:
+            # If that fails, try as datetime strings
+            df['plot_time'] = pd.to_datetime(df['Uhrzeit'])
+    
+    # Already datetime objects
+    elif isinstance(first_val, datetime):
+        df['plot_time'] = df['Uhrzeit']
+    
+    # Numeric values (Excel serial dates)
+    elif isinstance(first_val, (int, float)):
+        df['plot_time'] = pd.to_datetime(df['Uhrzeit'], unit='D', origin='1899-12-30')
+    
+    else:
+        # Fallback: create a time sequence
+        print(f"Warning: Unknown time format. Creating a sequence instead.")
+        df['plot_time'] = [datetime.combine(base_date, time(hour=i//60, minute=i%60)) 
+                         for i in range(len(df))]
+else:
+    # If "Uhrzeit" column doesn't exist
+    print(f"Warning: 'Uhrzeit' column not found. Using row numbers instead.")
+    df['plot_time'] = [datetime.combine(base_date, time(hour=i//60, minute=i%60)) 
+                     for i in range(len(df))]
+
+# Function to apply moving average to a data series
+def moving_average(data, window_size):
+    """Apply a moving average with the specified window size."""
+    if len(data) < window_size:
+        return data  # Return original if not enough data points
+    
+    # Use pandas rolling window with center=True to align the smoothed values
+    series = pd.Series(data).rolling(window=window_size, center=True).mean()
+    # Use bfill and ffill instead of fillna(method=...) to avoid deprecation warning
+    return series.bfill().ffill().values
+
+# Set the window size for moving average
+window_size = 5  # Adjust this value based on your data frequency and desired smoothness
+
+# Create figure with specific size (9cm width)
+# Convert 9cm to inches (1 inch = 2.54 cm)
+width_inches = 9 / 2.54
+height_inches = width_inches * 1.6  # Adjust height ratio for better proportions
+fig = plt.figure(figsize=(width_inches, height_inches))
+
+# Create a grid with 3 rows, 1 column
+gs = gridspec.GridSpec(3, 1, height_ratios=[1, 1, 0.8])
+
+# Calculate time range to determine appropriate locator
+time_min = df['plot_time'].min()
+time_max = df['plot_time'].max()
+time_range = time_max - time_min
+hours_range = time_range.total_seconds() / 3600
+
+# Helper function to set up time axis formatting
+def setup_time_axis(ax):
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+    
+    # Set locator based on time range
+    if hours_range <= 1:
+        ax.xaxis.set_major_locator(mdates.MinuteLocator(byminute=range(0, 60, 5)))
+    elif hours_range <= 3:
+        ax.xaxis.set_major_locator(mdates.MinuteLocator(byminute=range(0, 60, 15)))
+    elif hours_range <= 12:
+        ax.xaxis.set_major_locator(mdates.MinuteLocator(byminute=range(0, 60, 30)))
+    else:
+        ax.xaxis.set_major_locator(mdates.HourLocator())
+    
+    ax.xaxis.set_minor_locator(mdates.MinuteLocator(interval=5))
+    plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, fontsize=8, color='black')
+    ax.set_xlim(time_min, time_max)
+    ax.grid(True, alpha=0.3)
+
+# Viridis-inspired color palette
+viridis_colors = [
+    cm.viridis(0.2),   # Light green for H2
+    cm.viridis(0.5),   # Blue for CO
+    cm.viridis(0.8),   # Purple for CO2
+    cm.viridis(0.0)    # Dark blue for CH4
+]
+
+# Line styles
+line_styles = ['-', '--', '-.', ':']
+line_widths = [2, 1.5, 2, 1.5]
+
+# Top panel: Gas Composition vs Time
+ax_comp = fig.add_subplot(gs[0])
+species_labels = ["H$_2$", "CO", "CO$_2$", "CH$_4$"]
+composition_columns = ["H2 [Vol.-%,dry]", "CO high [Vol.-%,dry]", "CO2 [Vol.-%,dry]", "CH4 [Vol.-%,dry]"]
+
+# Check all columns exist and replace any missing ones with zeros
+for column in composition_columns:
+    if column not in df.columns:
+        print(f"Warning: Column '{column}' not found. Using zeros instead.")
+        df[column] = 0
+
+# Plot each gas component
+for i, (species, column, color, ls, lw) in enumerate(zip(species_labels, composition_columns, viridis_colors, line_styles, line_widths)):
+    # Apply moving average to smooth the data
+    smoothed_data = moving_average(df[column], window_size)
+    ax_comp.plot(df['plot_time'], smoothed_data, label=species, color=color, linestyle=ls, linewidth=lw)
+
+ax_comp.set_ylabel('Volume Fraction (%)', fontsize=9, color='black')
+ax_comp.tick_params(axis='both', labelsize=8, colors='black')
+# Place legend inside the plot with smaller font
+ax_comp.legend(loc='upper right', fontsize=7, framealpha=0.7)
+setup_time_axis(ax_comp)
+# Hide x-axis labels for top plot
+ax_comp.tick_params(axis='x', labelbottom=False)
+
+# Middle panel: Flow rates
+ax_flow = fig.add_subplot(gs[1], sharex=ax_comp)
+
+# Define colors for the flow rates
+flow_colors = ['#EF3895', '#9C179E', '#5B21B6', '#0F766E', '#047857']
+flow_lines = ['-', '-', '--', ':', '-.']
+flow_labels = ["O$_2$", "Biogas", "CO$_2$", "CH$_4$", "H$_2$O"]
+flow_columns = ["O2 mol/h", "Biogas mol/h", "mol CO2/h", "mol CH4/h", "mol/h wasser"]
+
+# Check all columns exist and replace any missing ones with zeros
+for column in flow_columns:
+    if column not in df.columns:
+        print(f"Warning: Column '{column}' not found. Using zeros instead.")
+        df[column] = 0
+
+# Plot each flow rate with moving average smoothing
+for i, (label, column, color, ls) in enumerate(zip(flow_labels, flow_columns, flow_colors, flow_lines)):
+    # Apply moving average for smoothing
+    smoothed_data = moving_average(df[column], window_size)
+    ax_flow.plot(df['plot_time'], smoothed_data, label=label, color=color, linestyle=ls, linewidth=1.5)
+
+ax_flow.set_ylabel('Molar Flow Rate (mol/h)', fontsize=9, color='black')
+ax_flow.tick_params(axis='both', labelsize=8, colors='black')
+# Move legend down by using a different position (upper center) with y offset
+legend = ax_flow.legend(loc='upper center', fontsize=7, ncol=3, framealpha=0.7, 
+                        bbox_to_anchor=(0.5, 0.75))  # y=0.75 moves it down from the top
+setup_time_axis(ax_flow)
+# Hide x-axis labels for middle plot
+ax_flow.tick_params(axis='x', labelbottom=False)
+
+# Bottom panel: S/C and Lambda
+ax_ratio = fig.add_subplot(gs[2], sharex=ax_comp)
+
+# Check if S/C and lambda columns exist
+if 'S/C' not in df.columns:
+    print(f"Warning: 'S/C' column not found. Using zeros instead.")
+    df['S/C'] = 0
+
+if 'lambda' not in df.columns:
+    print(f"Warning: 'lambda' column not found. Using zeros instead.")
+    df['lambda'] = 0
+
+# Plot S/C ratio
+smoothed_sc = moving_average(df['S/C'], window_size)
+ax_ratio.plot(df['plot_time'], smoothed_sc, label='S/C', color='#21908C', linestyle='-', linewidth=2.0)
+
+# Create twin axis for lambda
+ax_lambda = ax_ratio.twinx()
+smoothed_lambda = moving_average(df['lambda'], window_size)
+ax_lambda.plot(df['plot_time'], smoothed_lambda, label='λ', color='#F28E2B', linestyle='-', linewidth=2.0)
+
+# Set labels for both y-axes in black
+ax_ratio.set_ylabel('S/C (-)', fontsize=9, color='black')
+ax_lambda.set_ylabel('λ (-)', fontsize=9, color='black')
+ax_ratio.tick_params(axis='y', labelsize=8, colors='black')
+ax_lambda.tick_params(axis='y', labelsize=8, colors='black')
+
+# Set x-label only for bottom plot in black
+ax_ratio.set_xlabel('Time', fontsize=9, color='black')
+setup_time_axis(ax_ratio)
+
+# Combine legends for bottom plot with smaller font
+lines_sc, labels_sc = ax_ratio.get_legend_handles_labels()
+lines_lambda, labels_lambda = ax_lambda.get_legend_handles_labels()
+ax_ratio.legend(lines_sc + lines_lambda, labels_sc + labels_lambda, loc='upper right', fontsize=7, framealpha=0.7)
+
+# Adjust layout - no need for extra right margin now
+plt.tight_layout(pad=0.8, h_pad=0.5, w_pad=0.5)
+
+# Display the plot
+plt.savefig('startup_reformer_plot_vertical.png', dpi=300, bbox_inches='tight')
+plt.show()
