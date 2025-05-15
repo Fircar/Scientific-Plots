@@ -1,0 +1,146 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib.ticker as ticker
+from matplotlib.patches import PathPatch
+
+# Function to customize box plots
+def customize_boxplot(ax, bp):
+    # Define colors
+    green_fill = '#97D700'
+    light_green_fill = '#DFF0B3'  # Light shade of the green
+    
+    # Thicken the box frame and fill with light green
+    for box in bp['boxes']:
+        box.set(linewidth=2.5)
+        # Create a light green fill for boxes
+        box_path = box.get_path()
+        patch = PathPatch(box_path, facecolor=light_green_fill, alpha=0.7)
+        ax.add_patch(patch)
+    
+    # Customize median line - thick green
+    for median in bp['medians']:
+        median.set(linewidth=4, color=green_fill)
+    
+    # Thicken the whiskers and caps
+    for whisker in bp['whiskers']:
+        whisker.set(linewidth=2.5)
+    for cap in bp['caps']:
+        cap.set(linewidth=2.5)
+    
+    # Thicken the fliers (outliers)
+    for flier in bp['fliers']:
+        flier.set(markersize=8, markeredgewidth=2)
+
+# Read the Excel file
+file_path = r"File Path"
+df = pd.read_excel(file_path, sheet_name="Tabelle1")
+
+# Print the column names to check what's available
+print("Available columns in the Excel file:")
+for col in df.columns:
+    print(f"  - '{col}'")
+
+# Create a figure with three subplots side by side
+fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(17, 6))
+
+# Group data by COR value
+cor_groups = df.groupby('COR')
+
+# Lists to store data for each COR value
+sty_data = []
+c_conv_loop_data = []
+cor_reaktor_in_means = []  # Will store mean values
+
+# Find the correct Reaktor column name
+reaktor_cols = [col for col in df.columns if 'Reaktor' in str(col)]
+if reaktor_cols:
+    print(f"\nFound Reaktor column(s): {reaktor_cols}")
+    reaktor_col = reaktor_cols[0]  # Use the first one found
+else:
+    print("\nNo column containing 'Reaktor' found. Check your Excel file.")
+    reaktor_col = None
+
+# Get unique COR values and sort them
+cor_values = sorted(df['COR'].unique())
+
+# Prepare data for each COR value
+for cor in cor_values:
+    group = cor_groups.get_group(cor)
+    
+    # Add STY data
+    if 'STY (kg/kg/h)' in group.columns:
+        sty_data.append(group['STY (kg/kg/h)'].values)
+    else:
+        print(f"STY column not found for COR={cor}")
+        sty_data.append([0])
+    
+    # Add C-Conv-Loop data
+    if 'C-Conv-Loop' in group.columns:
+        c_conv_loop_data.append(group['C-Conv-Loop'].values)
+    else:
+        print(f"C-Conv-Loop column not found for COR={cor}")
+        c_conv_loop_data.append([0])
+    
+    # Add Reaktor data (using mean)
+    if reaktor_col and reaktor_col in group.columns:
+        cor_reaktor_in_means.append(group[reaktor_col].mean())
+    else:
+        print(f"Reaktor column not found for COR={cor}")
+        cor_reaktor_in_means.append(0)
+
+# 1. Create box plot for STY values
+bp1 = ax1.boxplot(sty_data, labels=cor_values)
+customize_boxplot(ax1, bp1)
+ax1.set_xlabel('COR', fontsize=16)
+ax1.set_ylabel('Space Time Yield STY (kg/kg/h)', fontsize=16)
+ax1.grid(True, linestyle='--', alpha=0.7, linewidth=2.5)
+ax1.tick_params(axis='both', labelsize=14, colors='black', width=2)
+
+# 2. Create box plot for C-Conv-Loop values
+bp2 = ax2.boxplot(c_conv_loop_data, labels=cor_values)
+customize_boxplot(ax2, bp2)
+ax2.set_xlabel('COR', fontsize=16)
+ax2.set_ylabel('Single Pass C-Conversion X$_{C}$ (%)', fontsize=16)
+ax2.grid(True, linestyle='--', alpha=0.7, linewidth=2.5)
+ax2.tick_params(axis='both', labelsize=16, colors='black', width=2)
+
+# 3. Create bar plot for mean COR Reaktor in values (with much thinner bars)
+bar_width = 0.4  # Extremely reduced bar width
+# Use the same x-positions as in the box plots
+# First convert cor_values to numeric to ensure proper spacing if they're strings
+x_positions = range(1, len(cor_values) + 1)  # Box plots use positions 1, 2, 3...
+bars = ax3.bar(x_positions, cor_reaktor_in_means, color='#97D700', 
+               edgecolor='black', linewidth=2.5, alpha=0.7, width=bar_width)
+
+# Set the exact same x-ticks as the box plots to ensure matching spacing
+ax3.set_xticks(x_positions)
+ax3.set_xticklabels(cor_values)
+ax3.set_xlabel('COR', fontsize=16)
+ax3.set_ylabel('Results Reactor Influent COR (%$_{CO_{2}}$)', fontsize=16)
+ax3.grid(True, linestyle='--', alpha=0.7, linewidth=2.5)
+ax3.tick_params(axis='both', labelsize=16, colors='black', width=2)
+
+# Set y-axis to start from 0 for all plots
+ax1.set_ylim(bottom=0)
+ax2.set_ylim(bottom=0)
+ax3.set_ylim(bottom=0)
+
+# Format y-axis tick labels with two decimal places for plots 2 and 3
+ax2.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.2f'))
+ax3.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.2f'))
+
+# Thicken the frame and spines for all plots
+for ax in [ax1, ax2, ax3]:
+    for spine in ax.spines.values():
+        spine.set_linewidth(3)
+        spine.set_color('black')
+
+# Adjust layout
+plt.tight_layout()
+
+# Show the plot
+plt.show()
+
+# Optionally save the figure
+# plt.savefig('cor_box_plots.png', dpi=300, bbox_inches='tight')
